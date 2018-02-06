@@ -1,41 +1,39 @@
 #!/usr/bin/env python3
 
-import pprint
+import socket
 
-import ipaddress
-from zeroconf import ServiceBrowser, Zeroconf, ZeroconfServiceTypes
+from zeroconf import ServiceInfo, Zeroconf
 
+from schema.ph_event import PhEvent
 
-class MyListener:
-
-    def remove_service(self, zeroconf, type, name):
-        print("Service %s removed" % (name,))
-
-    def add_service(self, zeroconf, type, name):
-        info = zeroconf.get_service_info(type, name)
-        print("Service {0} added".format(name))
-        pprint.pprint(info)
-        print("\tAddress: {0}".format(ipaddress.IPv4Address(info.address)))
-        print()
-
-
-'''
-_googlecast._tcp.local.
-_googlezone._tcp.local.
-_sftp-ssh._tcp.local.
-_ssh._tcp.local.
-'''
-
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 zeroconf = Zeroconf()
-listener = MyListener()
-browser1 = ServiceBrowser(zeroconf, "_googlecast._tcp.local.", listener)
-browser2 = ServiceBrowser(zeroconf, "_googlezone._tcp.local.", listener)
-browser3 = ServiceBrowser(zeroconf, "_sftp-ssh._tcp.local.", listener)
-browser4 = ServiceBrowser(zeroconf, "_ssh._tcp.local.", listener)
-
-print('\n'.join(ZeroconfServiceTypes.find()))
 
 try:
-    input("Press enter to exit...\n\n")
+    sock.bind(('0.0.0.0', 5500))
+    info = ServiceInfo("_capnproto._udp.local.",
+                       "data-listener._capnproto._udp.local.",
+                       socket.inet_aton('192.168.1.46'), 5500, 0, 0,
+                       {"type": "PhEvent"}, "tempest.local.")
+    zeroconf.register_service(info)
+    while True:
+        # receive data from client (data, addr)
+        d = sock.recvfrom(1024)
+        data = d[0]
+        addr = d[1]
+
+        if not data:
+            continue
+
+        ph_event = PhEvent.loads(data)
+
+        print("Message[{0}:{1}] - ph={2}, timestamp={3}".format(
+            str(addr[0]), str(addr[1]), str(ph_event.ph), str(ph_event.timestamp))
+        )
+except KeyboardInterrupt:
+    pass
 finally:
+    zeroconf.unregister_all_services()
     zeroconf.close()
+    sock.close()
+
