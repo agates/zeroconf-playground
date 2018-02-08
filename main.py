@@ -1,29 +1,55 @@
 #!/usr/bin/env python3
 
+import signal
 import socket
+import sys
 
+import re
+from capnpy.struct_ import Struct
+from twisted.internet import reactor
+from twisted.internet.protocol import DatagramProtocol
 from zeroconf import ServiceInfo, Zeroconf
 
+from schema.data_pathway import DataPathway
 from schema.ph_event import PhEvent
 
 
 def get_primary_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
     try:
         # open any connection, even if its unreachable
         s.connect(('10.255.255.255', 1))
         ip = s.getsockname()[0]
-    except Exception:
+    except socket._socket.gaierror:
         ip = '127.0.0.1'
     finally:
         s.close()
     return ip
 
 
+def underscore_to_camelcase(s):
+    return re.sub(r'(?!^)_([a-zA-Z])', lambda m: m.group(1).upper(), s)
+
+
+class DataPathwayProtocol(DatagramProtocol):
+    def __init__(self, capnproto_struct, handlers):
+        self.capnproto_struct = capnproto_struct
+        self.handlers = handlers
+
+    def datagramReceived(self, datagram, addr):
+        if datagram:
+            for handler in self.handlers:
+                try:
+                    handler(self.capnproto_struct.loads(datagram), addr)
+                except EOFError as e:
+                    print(e)
+
+
 class Announcer:
     def __init__(self,
-                 zeroconf_service_name="data-pathway",
-                 zeroconf_type="_capnproto._udp.local.",
+                 zeroconf_service_name="capnproto",
+                 zeroconf_type="_data-pathway._udp.local.",
                  zeroconf_service_address=get_primary_ip(),
                  zeroconf_server="{0}.local.".format(socket.gethostname())):
         self.zeroconf_service_name = zeroconf_service_name
@@ -31,59 +57,90 @@ class Announcer:
         self.zeroconf_service_address = zeroconf_service_address
         self.zeroconf_server = zeroconf_server
 
-        self.info = None
-        self.sock = None
-        self.capnproto_type = None
-        self.handler = None
-
+        self.zeroconf_info = None
         self.zeroconf = Zeroconf()
 
-    def __del__(self):
-        if self.info:
-            self.zeroconf.unregister_service(self.info)
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def close(self):
+        if self.zeroconf_info:
+            self.zeroconf.unregister_service(self.zeroconf_info)
         self.zeroconf.close()
-        if self.sock:
-            self.sock.close()
 
-    def register_pathway(self, capnproto_type, handler):
-        self.capnproto_type = capnproto_type
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind(('', 0))
-        self.info = ServiceInfo(self.zeroconf_type,
-                                "{0}.{1}".format(
-                                    self.zeroconf_service_name, self.zeroconf_type
-                                ),
-                                socket.inet_aton(self.zeroconf_service_address),
-                                self.sock.getsockname()[1],
-                                0, 0,
-                                {"type": self.capnproto_type.__name__},
-                                self.zeroconf_server)
-        self.handler = handler
-        self.zeroconf.register_service(self.info)
+    def register_pathway(self, capnproto_struct, handlers):
+        if not issubclass(capnproto_struct, Struct):
+            raise ValueError("capnproto_struct must be a capnpy Struct")
 
-    def run_loop(self):
-        # TODO: Replace this with a thread (or just migrate to something like twisted)
+        if len(handlers) == 0:
+            raise ValueError("Must specify at least one handler")
 
-        while True:
-            # TODO: Explore buffer sizes
-            r = self.sock.recvfrom(1024)
+        for handler in handlers:
+            if not callable(handler):
+                raise ValueError("Handler must be callable")
 
-            if not r[0]:
-                continue
+        handlers = tuple(handlers)
 
-            try:
-                self.handler(self.capnproto_type.loads(r[0]), r[1])
-            except EOFError as e:
-                print(e)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setblocking(False)
+        sock.bind(('', 0))
+        port = sock.getsockname()[1]
+
+        reactor.adoptDatagramPort(
+            sock.fileno(), socket.AF_INET,
+            DataPathwayProtocol(capnproto_struct, handlers)
+        )
+        sock.close()
+
+        data_pathway = DataPathway(
+            struct_name=capnproto_struct.__name__,
+            handlers=[underscore_to_camelcase(handler.__name__) for handler in handlers]
+        )
+
+        self.zeroconf_info = ServiceInfo(
+            self.zeroconf_type,
+            "{0}_{1}.{2}".format(
+                capnproto_struct.__name__,
+                self.zeroconf_service_name,
+                self.zeroconf_type
+            ),
+            socket.inet_aton(self.zeroconf_service_address),
+            port,
+            0, 0,
+            {b"data-pathway": data_pathway.dumps()},
+            self.zeroconf_server
+        )
+
+        self.zeroconf.register_service(self.zeroconf_info)
 
 
-announcer = Announcer()
-announcer.register_pathway(PhEvent,
-                           lambda data, addr:
-                           print("Message[{0}:{1}] - ph={2}, timestamp={3}".format(
-                               str(addr[0]), str(addr[1]), str(data.ph), str(data.timestamp)))
-                           )
+def log_phevent(datagram, addr):
+    print("Message[{0}:{1}] - ph={2}, timestamp={3}".format(
+        str(addr[0]), str(addr[1]), str(datagram.ph), str(datagram.timestamp)
+    ))
+
+
+def do_something_else_with_phevent(datagram, addr):
+    print("Passing")
+    pass
+
+
+signal.signal(signal.SIGINT, signal.default_int_handler)
+
+with Announcer() as announcer:
+    announcer.register_pathway(
+        PhEvent, [
+            log_phevent,
+            do_something_else_with_phevent
+        ]
+    )
+
 try:
-    announcer.run_loop()
+    reactor.run()
 except KeyboardInterrupt:
     pass
+finally:
+    sys.exit()
