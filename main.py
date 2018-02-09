@@ -10,8 +10,8 @@ from twisted.internet import reactor
 from twisted.internet.protocol import DatagramProtocol
 from zeroconf import ServiceInfo, Zeroconf
 
-from schema.data_pathway import DataPathway
 from schema.ph_event import PhEvent
+from schema.struct_handler_info import StructHandlerInfo
 
 
 def get_primary_ip():
@@ -48,11 +48,11 @@ class DataPathwayProtocol(DatagramProtocol):
 
 class Announcer:
     def __init__(self,
-                 zeroconf_service_name="capnproto",
+                 zeroconf_sub_type="capnproto",
                  zeroconf_type="_data-pathway._udp.local.",
                  zeroconf_service_address=get_primary_ip(),
                  zeroconf_server="{0}.local.".format(socket.gethostname())):
-        self.zeroconf_service_name = zeroconf_service_name
+        self.zeroconf_sub_type = zeroconf_sub_type
         self.zeroconf_type = zeroconf_type
         self.zeroconf_service_address = zeroconf_service_address
         self.zeroconf_server = zeroconf_server
@@ -95,26 +95,25 @@ class Announcer:
         )
         sock.close()
 
-        data_pathway = DataPathway(
+        data_pathway = StructHandlerInfo(
             struct_name=capnproto_struct.__name__,
             handlers=[underscore_to_camelcase(handler.__name__) for handler in handlers]
         )
 
         self.zeroconf_info = ServiceInfo(
             self.zeroconf_type,
-            "{0}_{1}.{2}".format(
-                capnproto_struct.__name__,
-                self.zeroconf_service_name,
+            "{0}._sub.{1}".format(
+                self.zeroconf_sub_type,
                 self.zeroconf_type
             ),
             socket.inet_aton(self.zeroconf_service_address),
             port,
             0, 0,
-            {b"data-pathway": data_pathway.dumps()},
+            {b"struct-handler-info": data_pathway.dumps()},
             self.zeroconf_server
         )
 
-        self.zeroconf.register_service(self.zeroconf_info)
+        self.zeroconf.register_service(self.zeroconf_info, allow_name_change=True)
 
 
 def log_phevent(datagram, addr):
@@ -138,9 +137,9 @@ with Announcer() as announcer:
         ]
     )
 
-try:
-    reactor.run()
-except KeyboardInterrupt:
-    pass
-finally:
-    sys.exit()
+    try:
+        reactor.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        sys.exit()

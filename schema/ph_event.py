@@ -1,29 +1,15 @@
 # THIS FILE HAS BEEN GENERATED AUTOMATICALLY BY capnpy
 # do not edit by hand
-# generated on 2018-02-04 23:31
+# generated on 2018-02-08 23:38
 
-from capnpy import ptr as _ptr
-from capnpy.struct_ import Struct as _Struct
-from capnpy.struct_ import check_tag as _check_tag
-from capnpy.struct_ import undefined as _undefined
-from capnpy.enum import enum as _enum, fill_enum as _fill_enum
-from capnpy.enum import BaseEnum as _BaseEnum
-from capnpy.type import Types as _Types
-from capnpy.segment.builder import SegmentBuilder as _SegmentBuilder
-from capnpy.list import List as _List
-from capnpy.list import PrimitiveItemType as _PrimitiveItemType
-from capnpy.list import BoolItemType as _BoolItemType
-from capnpy.list import TextItemType as _TextItemType
 from capnpy.list import StructItemType as _StructItemType
-from capnpy.list import EnumItemType as _EnumItemType
-from capnpy.list import VoidItemType as _VoidItemType
-from capnpy.list import ListItemType as _ListItemType
-from capnpy.util import text_repr as _text_repr
-from capnpy.util import float32_repr as _float32_repr
-from capnpy.util import float64_repr as _float64_repr
-from capnpy.util import extend_module_maybe as _extend_module_maybe
+from capnpy.segment.builder import SegmentBuilder as _SegmentBuilder
+from capnpy.struct_ import Struct as _Struct
 from capnpy.util import check_version as _check_version
-__capnpy_version__ = '0.4.1'
+from capnpy.util import extend_module_maybe as _extend_module_maybe
+from capnpy.util import float32_repr as _float32_repr
+
+__capnpy_version__ = '0.4.3'
 _check_version(__capnpy_version__)
 
 #### FORWARD DECLARATIONS ####

@@ -1,6 +1,6 @@
 # THIS FILE HAS BEEN GENERATED AUTOMATICALLY BY capnpy
 # do not edit by hand
-# generated on 2018-02-07 21:35
+# generated on 2018-02-09 01:33
 
 from capnpy.list import List as _List
 from capnpy.list import StructItemType as _StructItemType
@@ -12,22 +12,21 @@ from capnpy.util import check_version as _check_version
 from capnpy.util import extend_module_maybe as _extend_module_maybe
 from capnpy.util import text_repr as _text_repr
 
-__capnpy_version__ = '0.4.1'
+__capnpy_version__ = '0.4.3'
 _check_version(__capnpy_version__)
-
 
 #### FORWARD DECLARATIONS ####
 
-class DataPathway(_Struct): pass
+class StructHandlerInfo(_Struct): pass
 
 
-DataPathway.__name__ = 'DataPathway'
+StructHandlerInfo.__name__ = 'StructHandlerInfo'
 
 
 #### DEFINITIONS ####
 
-@DataPathway.__extend__
-class DataPathway(_Struct):
+@StructHandlerInfo.__extend__
+class StructHandlerInfo(_Struct):
     __static_data_size__ = 0
     __static_ptrs_size__ = 2
 
@@ -67,7 +66,7 @@ class DataPathway(_Struct):
         return builder.as_string()
 
     def __init__(self, struct_name=None, handlers=None):
-        _buf = DataPathway.__new(struct_name, handlers)
+        _buf = StructHandlerInfo.__new(struct_name, handlers)
         self._init_from_buffer(_buf, 0, 0, 2)
 
     def shortrepr(self):
@@ -77,6 +76,7 @@ class DataPathway(_Struct):
         return "(%s)" % ", ".join(parts)
 
 
-_DataPathway_list_item_type = _StructItemType(DataPathway)
+_StructHandlerInfo_list_item_type = _StructItemType(StructHandlerInfo)
+
 
 _extend_module_maybe(globals(), modname=__name__)
