@@ -144,8 +144,8 @@ with Announcer() as announcer:
         with connection.cursor(cursor_factory=psycopg2cffi.extras.DictCursor) as cursor:
             announcer.register_pathway(
                 PhEvent, [
-                    log_phevent,
-                    insert_into_database
+                    insert_into_database,
+                    log_phevent
                 ]
             )
 
@@ -153,5 +153,5 @@ with Announcer() as announcer:
                 reactor.run()
             except KeyboardInterrupt:
                 pass
-            finally:
-                sys.exit()
+
+sys.exit()
