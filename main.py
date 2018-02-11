@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 
+import re
 import signal
 import socket
 import sys
 
-import re
 from capnpy.struct_ import Struct
+import psycopg2cffi.extras
 from twisted.internet import reactor
 from twisted.internet.protocol import DatagramProtocol
 from zeroconf import ServiceInfo, Zeroconf
 
 from schema.ph_event import PhEvent
 from schema.struct_handler_info import StructHandlerInfo
+from settings import *
 
 
 def get_primary_ip():
@@ -96,8 +98,8 @@ class Announcer:
         sock.close()
 
         data_pathway = StructHandlerInfo(
-            struct_name=capnproto_struct.__name__,
-            handlers=[underscore_to_camelcase(handler.__name__) for handler in handlers]
+            struct_name=bytes(capnproto_struct.__name__, 'UTF-8'),
+            handlers=[bytes(underscore_to_camelcase(handler.__name__), 'UTF-8') for handler in handlers]
         )
 
         self.zeroconf_info = ServiceInfo(
@@ -117,29 +119,39 @@ class Announcer:
 
 
 def log_phevent(datagram, addr):
-    print("Message[{0}:{1}] - ph={2}, timestamp={3}".format(
-        str(addr[0]), str(addr[1]), str(datagram.ph), str(datagram.timestamp)
+    print("Message[{0}:{1}] - group_name={2}, ph={3}, timestamp={4}".format(
+        str(addr[0]), str(addr[1]),
+        datagram.group_name.decode("UTF-8"), datagram.ph.decode("UTF-8"), str(datagram.timestamp)
     ))
 
 
-def do_something_else_with_phevent(datagram, addr):
-    print("Passing")
-    pass
+def insert_into_database(datagram, addr):
+    insert_query = '''INSERT INTO public.phlogs(
+                        ph, logtime, group_name)
+                        VALUES (%s, to_timestamp(%s), %s)'''
+    cursor.execute(insert_query,
+                   (datagram.ph.decode("UTF-8"),
+                    datagram.timestamp / 10 ** 9,
+                    datagram.group_name.decode("UTF-8"))
+                   )
+    connection.commit()
 
 
 signal.signal(signal.SIGINT, signal.default_int_handler)
 
 with Announcer() as announcer:
-    announcer.register_pathway(
-        PhEvent, [
-            log_phevent,
-            do_something_else_with_phevent
-        ]
-    )
+    with psycopg2cffi.connect(database=database, user=user, password=password, host=host, port=port) as connection:
+        with connection.cursor(cursor_factory=psycopg2cffi.extras.DictCursor) as cursor:
+            announcer.register_pathway(
+                PhEvent, [
+                    log_phevent,
+                    insert_into_database
+                ]
+            )
 
-    try:
-        reactor.run()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        sys.exit()
+            try:
+                reactor.run()
+            except KeyboardInterrupt:
+                pass
+            finally:
+                sys.exit()
